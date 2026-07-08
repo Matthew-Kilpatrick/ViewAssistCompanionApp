@@ -133,6 +133,10 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json) // Ktor- To work with Serialization
     implementation(libs.ktor.client.content.negotiation) // Serialization
     implementation(libs.androidx.datastore.core)
+    implementation(libs.sendspin.jvm)
+    implementation(libs.okhttp)
+    implementation(libs.moshi)
+    implementation(libs.moshi.kotlin)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -15,6 +15,7 @@ import com.msp1974.vacompanion.broadcasts.BroadcastSender
 import com.msp1974.vacompanion.device.sensors.NetworkStatus
 import com.msp1974.vacompanion.settings.APPConfig
 import com.msp1974.vacompanion.settings.PageLoadingStage
+import com.msp1974.vacompanion.sendspin.SendspinDefaults
 import com.msp1974.vacompanion.utils.Event
 import com.msp1974.vacompanion.utils.EventListener
 import com.msp1974.vacompanion.utils.Helpers
@@ -144,7 +145,13 @@ data class State(
     var cameraStreamActive: Boolean = false,
     var motionDetectionSensitivity: Int = 0,
     var motionDetectionMode: String = "motion",
-    var sensorState: SensorState = SensorState()
+    var sensorState: SensorState = SensorState(),
+    var sendspinEnabled: Boolean = false,
+    var sendspinHost: String = "",
+    var sendspinPort: Int = SendspinDefaults.PORT,
+    var sendspinPath: String = SendspinDefaults.PATH,
+    var sendspinReconnect: Boolean = true,
+    var sendspinStatus: String = "Disabled"
     )
 
 @HiltViewModel
@@ -188,6 +195,7 @@ class VAViewModel @Inject constructor(
                         webViewPageLoadingStage = status.webViewPageLoadingStage,
                         cameraStreamActive = status.cameraStreamActive,
                         screenBlank = status.screenBlank,
+                        sendspinStatus = status.sendspin.summary,
                         diagnosticInfo = currentState.diagnosticInfo.copy(
                             muted = status.isMuted
                         ),
@@ -222,7 +230,12 @@ class VAViewModel @Inject constructor(
                     muted = config.isMuted,
                     hasCamera = deviceInfo.hardware.hasFrontCamera,
                     motionDetectionMode = config.motionDetectionMode
-                )
+                ),
+                sendspinEnabled = config.sendspinEnabled,
+                sendspinHost = config.sendspinHost,
+                sendspinPort = config.sendspinPort,
+                sendspinPath = config.sendspinPath,
+                sendspinReconnect = config.sendspinReconnect
             )
         }
 
@@ -728,6 +741,45 @@ class VAViewModel @Inject constructor(
                 )
             )
         }
+    }
+
+    fun setSendspinEnabled(enabled: Boolean) {
+        config.sendspinEnabled = enabled
+        config.sendspinEnabledPref = enabled
+        _vacaState.update { it.copy(sendspinEnabled = enabled) }
+    }
+
+    fun setSendspinHost(host: String) {
+        val value = host.trim()
+        config.sendspinHost = value
+        config.sendspinHostPref = value
+        _vacaState.update { it.copy(sendspinHost = value) }
+    }
+
+    fun setSendspinPort(port: Int) {
+        val value = port.coerceIn(1, 65535)
+        config.sendspinPort = value
+        config.sendspinPortPref = value
+        _vacaState.update { it.copy(sendspinPort = value) }
+    }
+
+    fun setSendspinPath(path: String) {
+        val value = if (path.startsWith("/")) path else "/$path"
+        config.sendspinPath = value
+        config.sendspinPathPref = value
+        _vacaState.update { it.copy(sendspinPath = value) }
+    }
+
+    fun setSendspinReconnect(enabled: Boolean) {
+        config.sendspinReconnect = enabled
+        config.sendspinReconnectPref = enabled
+        _vacaState.update { it.copy(sendspinReconnect = enabled) }
+    }
+
+    fun setSendspinStaticDelayMs(delayMs: Int) {
+        val value = delayMs.coerceIn(0, 5000)
+        config.sendspinStaticDelayMs = value
+        config.sendspinStaticDelayMsPref = value
     }
 }
 

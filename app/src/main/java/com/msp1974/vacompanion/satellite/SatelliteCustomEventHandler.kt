@@ -35,6 +35,7 @@ class SatelliteCustomEventHandler(
     val config = deviceManager.config
 
     private val serviceStarted = CompletableDeferred<Int>()
+    private var sendspinPausedMusic = false
 
     fun run() {
         scope.launch {
@@ -171,6 +172,18 @@ class SatelliteCustomEventHandler(
                         })
                     }
                 )
+            }
+            "sendspinConnected" -> {
+                val connected = event.newValue as? Boolean ?: false
+                if (connected) {
+                    if (!sendspinPausedMusic) {
+                        satellite.mediaManager.musicPlayer.pause()
+                        sendspinPausedMusic = true
+                    }
+                } else if (sendspinPausedMusic) {
+                    satellite.mediaManager.musicPlayer.resume()
+                    sendspinPausedMusic = false
+                }
             }
             "cameraStreamActive" -> {
                 val active = event.newValue as Boolean

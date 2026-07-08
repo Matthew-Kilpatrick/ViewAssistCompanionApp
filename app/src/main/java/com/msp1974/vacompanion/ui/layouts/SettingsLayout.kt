@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DisabledByDefault
 import androidx.compose.material.icons.filled.FileCopy
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Surface
@@ -32,6 +33,7 @@ import com.msp1974.vacompanion.ui.components.VADialog
  */
 enum class SettingsScreen {
     MAIN,
+    SENDSPIN,
     CUSTOM_FILES,
     PERMISSIONS_INFO,
     CAMERA_STREAM,
@@ -99,6 +101,15 @@ fun SettingsLayout(
 
                     menuOptions.add(
                         MenuOption(
+                            title = "Sendspin",
+                            subtitle = "Receiver mode settings and status",
+                            icon = Icons.Default.Speaker,
+                            onClick = { currentScreen = SettingsScreen.SENDSPIN }
+                        )
+                    )
+
+                    menuOptions.add(
+                        MenuOption(
                             title = "Manage Custom Files",
                             subtitle = "Manage custom wake words, sounds and alarms",
                             icon = Icons.Default.FileCopy,
@@ -139,6 +150,12 @@ fun SettingsLayout(
                 }
                 SettingsScreen.CUSTOM_FILES -> {
                     CustomFilesLayout(
+                        viewModel = viewModel,
+                        onBack = { currentScreen = SettingsScreen.MAIN }
+                    )
+                }
+                SettingsScreen.SENDSPIN -> {
+                    SendspinSettingsLayout(
                         viewModel = viewModel,
                         onBack = { currentScreen = SettingsScreen.MAIN }
                     )

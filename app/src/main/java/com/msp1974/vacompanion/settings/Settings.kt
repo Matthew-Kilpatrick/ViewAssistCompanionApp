@@ -11,6 +11,9 @@ import androidx.core.content.edit
 import com.google.android.gms.common.util.ClientLibraryUtils.getPackageInfo
 import com.msp1974.vacompanion.data.AvailableAlarm
 import com.msp1974.vacompanion.data.AvailableWakeSound
+import com.msp1974.vacompanion.sendspin.SendspinConnectionMode
+import com.msp1974.vacompanion.sendspin.SendspinDefaults
+import com.msp1974.vacompanion.sendspin.SendspinPrefKeys
 import com.msp1974.vacompanion.utils.Event
 import com.msp1974.vacompanion.utils.EventNotifier
 import com.msp1974.vacompanion.utils.FirebaseManager
@@ -268,11 +271,40 @@ class APPConfig @Inject constructor(val context: Context) {
         onValueChangedListener(property, oldValue, newValue)
     }
 
+    var sendspinEnabled: Boolean by Delegates.observable(false) { property, oldValue, newValue ->
+        onValueChangedListener(property, oldValue, newValue)
+    }
+
+    var sendspinHost: String by Delegates.observable("") { property, oldValue, newValue ->
+        onValueChangedListener(property, oldValue, newValue)
+    }
+
+    var sendspinPort: Int by Delegates.observable(SendspinDefaults.PORT) { property, oldValue, newValue ->
+        onValueChangedListener(property, oldValue, newValue)
+    }
+
+    var sendspinPath: String by Delegates.observable(SendspinDefaults.PATH) { property, oldValue, newValue ->
+        onValueChangedListener(property, oldValue, newValue)
+    }
+
+    var sendspinReconnect: Boolean by Delegates.observable(true) { property, oldValue, newValue ->
+        onValueChangedListener(property, oldValue, newValue)
+    }
+
+    var sendspinStaticDelayMs: Int by Delegates.observable(0) { property, oldValue, newValue ->
+        onValueChangedListener(property, oldValue, newValue)
+    }
+
     var customFiles: JsonElement by Delegates.observable(buildJsonObject {
         putJsonArray("microwakeword") {}
         putJsonArray("openwakeword") {}
     }) { property, oldValue, newValue ->
         onValueChangedListener(property, oldValue, newValue)
+    }
+
+    init {
+        // Must run after delegated properties are initialized.
+        loadLocalPreferences()
     }
 
 
@@ -306,6 +338,30 @@ class APPConfig @Inject constructor(val context: Context) {
     var refreshToken: String
         get() = this.sharedPrefs.getString("refresh_token", "") ?: ""
         set(value) = this.sharedPrefs.edit { putString("refresh_token", value) }
+
+    var sendspinEnabledPref: Boolean
+        get() = this.sharedPrefs.getBoolean(SendspinPrefKeys.ENABLED, false)
+        set(value) = this.sharedPrefs.edit { putBoolean(SendspinPrefKeys.ENABLED, value) }
+
+    var sendspinHostPref: String
+        get() = this.sharedPrefs.getString(SendspinPrefKeys.HOST, "") ?: ""
+        set(value) = this.sharedPrefs.edit { putString(SendspinPrefKeys.HOST, value) }
+
+    var sendspinPortPref: Int
+        get() = this.sharedPrefs.getInt(SendspinPrefKeys.PORT, SendspinDefaults.PORT)
+        set(value) = this.sharedPrefs.edit { putInt(SendspinPrefKeys.PORT, value.coerceIn(1, 65535)) }
+
+    var sendspinPathPref: String
+        get() = this.sharedPrefs.getString(SendspinPrefKeys.PATH, SendspinDefaults.PATH) ?: SendspinDefaults.PATH
+        set(value) = this.sharedPrefs.edit { putString(SendspinPrefKeys.PATH, value) }
+
+    var sendspinReconnectPref: Boolean
+        get() = this.sharedPrefs.getBoolean(SendspinPrefKeys.RECONNECT, true)
+        set(value) = this.sharedPrefs.edit { putBoolean(SendspinPrefKeys.RECONNECT, value) }
+
+    var sendspinStaticDelayMsPref: Int
+        get() = this.sharedPrefs.getInt(SendspinPrefKeys.STATIC_DELAY_MS, 0)
+        set(value) = this.sharedPrefs.edit { putInt(SendspinPrefKeys.STATIC_DELAY_MS, value.coerceIn(0, 5000)) }
 
 
 
@@ -365,8 +421,42 @@ class APPConfig @Inject constructor(val context: Context) {
         settings["continue_conversation"]?.jsonPrimitive?.booleanOrNull?.let { continueConversation = it }
         settings["quick_actions"]?.jsonPrimitive?.booleanOrNull?.let { enableQuickActions = it }
         settings["custom_files"]?.let { customFiles = it }
+        settings[SendspinPrefKeys.ENABLED]?.jsonPrimitive?.booleanOrNull?.let {
+            sendspinEnabled = it
+            sendspinEnabledPref = it
+        }
+        settings[SendspinPrefKeys.HOST]?.jsonPrimitive?.contentOrNull?.let {
+            sendspinHost = it
+            sendspinHostPref = it
+        }
+        settings[SendspinPrefKeys.PORT]?.jsonPrimitive?.intOrNull?.let {
+            sendspinPort = it
+            sendspinPortPref = it
+        }
+        settings[SendspinPrefKeys.PATH]?.jsonPrimitive?.contentOrNull?.let {
+            sendspinPath = it
+            sendspinPathPref = it
+        }
+        settings[SendspinPrefKeys.RECONNECT]?.jsonPrimitive?.booleanOrNull?.let {
+            sendspinReconnect = it
+            sendspinReconnectPref = it
+        }
+
+        settings["sendspin_static_delay_ms"]?.jsonPrimitive?.intOrNull?.let {
+            sendspinStaticDelayMs = it
+            sendspinStaticDelayMsPref = it
+        }
 
         firebase.addToCrashLog("Settings update")
+    }
+
+    fun loadLocalPreferences() {
+        sendspinEnabled = sendspinEnabledPref
+        sendspinHost = sendspinHostPref
+        sendspinPort = sendspinPortPref
+        sendspinPath = sendspinPathPref
+        sendspinReconnect = sendspinReconnectPref
+        sendspinStaticDelayMs = sendspinStaticDelayMsPref
     }
 
     @SuppressLint("HardwareIds")

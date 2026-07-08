@@ -7,6 +7,7 @@ import com.msp1974.vacompanion.device.info.DeviceInfo
 import com.msp1974.vacompanion.device.sensors.NetworkState
 import com.msp1974.vacompanion.device.sensors.SensorManager
 import com.msp1974.vacompanion.device.sensors.SensorState
+import com.msp1974.vacompanion.sendspin.SendspinRuntimeStatus
 import com.msp1974.vacompanion.settings.APPConfig
 import com.msp1974.vacompanion.settings.PageLoadingStage
 import com.msp1974.vacompanion.wyoming.ServerState
@@ -30,6 +31,7 @@ data class WyomingServerStatus(
 data class Status(
     val network: NetworkState = NetworkState(),
     val wyoming: WyomingServerStatus = WyomingServerStatus(),
+    val sendspin: SendspinRuntimeStatus = SendspinRuntimeStatus(),
     val sensors: SensorState = SensorState(),
     val sessionToken: Token? = null,
 
@@ -60,6 +62,9 @@ class DeviceManager @Inject constructor(
     // Server (Wyoming) connection status handling
     private val _serverStatus = MutableStateFlow(WyomingServerStatus())
     val serverStatus: StateFlow<WyomingServerStatus> = _serverStatus.asStateFlow()
+
+    private val _sendspinStatus = MutableStateFlow(SendspinRuntimeStatus())
+    val sendspinStatus: StateFlow<SendspinRuntimeStatus> = _sendspinStatus.asStateFlow()
 
     // Sensors - Holds only the latest updates for Wyoming
     private val _sensors = MutableStateFlow(emptyMap<String, Any>())
@@ -96,6 +101,11 @@ class DeviceManager @Inject constructor(
     fun updateServerState(state: WyomingServerStatus) {
         _serverStatus.value = state
         _status.update { it.copy(wyoming = state) }
+    }
+
+    fun updateSendspinStatus(state: SendspinRuntimeStatus) {
+        _sendspinStatus.value = state
+        _status.update { it.copy(sendspin = state) }
     }
 
     fun updateDNDStatus(enabled: Boolean) {

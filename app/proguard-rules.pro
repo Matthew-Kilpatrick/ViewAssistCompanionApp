@@ -27,3 +27,8 @@
 -dontwarn org.conscrypt.OpenSSLProvider
 
 -keep class ai.onnxruntime.** { *; }
+
+# Sendspin protocol + generated Moshi adapters
+-keep class com.sendspin.protocol.** { *; }
+-keep class com.squareup.moshi.** { *; }
+-keep @com.squareup.moshi.JsonClass class * { *; }
