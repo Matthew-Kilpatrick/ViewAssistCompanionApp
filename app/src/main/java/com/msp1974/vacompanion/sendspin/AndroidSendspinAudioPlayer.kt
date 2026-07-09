@@ -2,7 +2,6 @@ package com.msp1974.vacompanion.sendspin
 
 import android.media.AudioAttributes
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioTrack
 import com.sendspin.protocol.AudioBuffer
 import com.sendspin.protocol.AudioPlayer
@@ -10,6 +9,7 @@ import com.sendspin.protocol.ClockSync
 import com.sendspin.protocol.StreamFormat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 import timber.log.Timber
@@ -18,6 +18,28 @@ internal class AndroidSendspinAudioPlayer(
     private val audioBuffer: AudioBuffer,
     private val clockSync: ClockSync,
 ) : AudioPlayer {
+
+    companion object {
+        private const val NORMAL_GAIN = 1f
+
+        @Volatile
+        private var duckingEnabled: Boolean = false
+
+        @Volatile
+        private var duckingGain: Float = 0.25f
+
+        private val activePlayers = Collections.synchronizedSet(mutableSetOf<AndroidSendspinAudioPlayer>())
+
+        fun setDuckingEnabled(enabled: Boolean, gain: Float = duckingGain) {
+            duckingEnabled = enabled
+            duckingGain = gain.coerceIn(0f, 1f)
+            synchronized(activePlayers) {
+                activePlayers.forEach { player ->
+                    player.applyEffectiveVolume()
+                }
+            }
+        }
+    }
 
     @Volatile
     private var playbackGain: Float = 1f
@@ -75,7 +97,7 @@ internal class AndroidSendspinAudioPlayer(
 
         audioTrack?.release()
         audioTrack = newTrack
-        newTrack.setVolume(playbackGain)
+        applyEffectiveVolume()
     }
 
     override fun start() {
@@ -85,6 +107,7 @@ internal class AndroidSendspinAudioPlayer(
         stopRequested.set(false)
         track.play()
         isPlaying = true
+        activePlayers.add(this)
         worker = thread(start = true, name = "sendspin-audio-worker") {
             runPlaybackLoop(track)
         }
@@ -118,6 +141,7 @@ internal class AndroidSendspinAudioPlayer(
         }
         audioTrack = null
         isPlaying = false
+        activePlayers.remove(this)
     }
 
     override fun transition(format: StreamFormat) {
@@ -127,7 +151,12 @@ internal class AndroidSendspinAudioPlayer(
 
     override fun setVolume(gain: Float) {
         playbackGain = gain.coerceIn(0f, 1f)
-        audioTrack?.setVolume(playbackGain)
+        applyEffectiveVolume()
+    }
+
+    private fun applyEffectiveVolume() {
+        val targetGain = if (duckingEnabled) duckingGain else NORMAL_GAIN
+        audioTrack?.setVolume((playbackGain * targetGain).coerceIn(0f, 1f))
     }
 
     private fun runPlaybackLoop(track: AudioTrack) {

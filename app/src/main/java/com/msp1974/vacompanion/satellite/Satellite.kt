@@ -483,12 +483,18 @@ abstract class Satellite(var context: Context, val deviceManager: DeviceManager,
                 when (state) {
                     PipelineStage.LISTENING -> {
                         wakeWordHandler?.engine!!.setStreaming(true)
+                        config.eventBroadcaster.notifyEvent(Event("voiceInteractionActive", false, true))
+                    }
+                    PipelineStage.STARTING_TTS,
+                    PipelineStage.STREAMING_TTS -> {
+                        config.eventBroadcaster.notifyEvent(Event("voiceInteractionActive", false, true))
                     }
                     PipelineStage.VOICE_STOPPED -> { wakeWordHandler?.engine!!.setStreaming(false) }
                     PipelineStage.ENDED -> {
                         if (wakeWordHandler?.engine!!.isStreaming()) {
                             wakeWordHandler?.engine!!.setStreaming(false)
                         }
+                        config.eventBroadcaster.notifyEvent(Event("voiceInteractionActive", true, false))
                     }
                     else -> {}
                 }
@@ -587,6 +593,11 @@ abstract class Satellite(var context: Context, val deviceManager: DeviceManager,
     }
 
     private suspend fun handleMediaPlayerAction(action: String, payloadStr: String) {
+        when (action) {
+            "play-media", "play" -> config.eventBroadcaster.notifyEvent(Event("mediaPlaybackActive", false, true))
+            "pause", "stop" -> config.eventBroadcaster.notifyEvent(Event("mediaPlaybackActive", true, false))
+        }
+
         withContext(Dispatchers.Main) {
             when (action) {
                 "play-media" -> if (payloadStr.isNotEmpty()) {

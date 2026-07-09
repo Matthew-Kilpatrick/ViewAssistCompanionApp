@@ -27,6 +27,8 @@ internal class BackgroundTaskController (private val context: Context, val devic
     private var server: WyomingTCPServer? = null
     private var networkJob: Job? = null
     private var sendspinController: SendspinControllerImpl? = null
+    private var voiceInteractionActive = false
+    private var mediaInterruptionActive = false
     private val config = deviceManager.config
 
 
@@ -111,7 +113,13 @@ internal class BackgroundTaskController (private val context: Context, val devic
         server?.stopServer()
         sendspinController?.destroy()
         sendspinController = null
+        voiceInteractionActive = false
+        mediaInterruptionActive = false
         scope.cancel()
+    }
+
+    private fun syncSendspinDucking() {
+        sendspinController?.setDucked(voiceInteractionActive || mediaInterruptionActive)
     }
 
     override fun onEventTriggered(event: Event) {
@@ -129,6 +137,24 @@ internal class BackgroundTaskController (private val context: Context, val devic
                 if (config.sendspinEnabled) {
                     sendspinController?.start()
                 }
+            }
+            "voiceInteractionActive" -> {
+                val active = event.newValue as? Boolean ?: return
+                voiceInteractionActive = active
+                syncSendspinDucking()
+            }
+            "musicPlayerPlayingStatus" -> {
+                val active = event.newValue as? Boolean ?: return
+                mediaInterruptionActive = active
+                syncSendspinDucking()
+            }
+            "mediaPlaybackActive" -> {
+                val active = event.newValue as? Boolean ?: return
+                mediaInterruptionActive = active
+                syncSendspinDucking()
+            }
+            "duckingVolume" -> {
+                syncSendspinDucking()
             }
         }
     }

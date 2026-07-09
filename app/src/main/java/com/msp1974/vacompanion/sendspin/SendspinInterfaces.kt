@@ -7,4 +7,5 @@ interface SendspinController {
     fun stop()
     fun onNetworkAvailable()
     fun onNetworkLost()
+    fun setDucked(ducked: Boolean)
 }

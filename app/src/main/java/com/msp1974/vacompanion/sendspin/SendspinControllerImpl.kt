@@ -49,6 +49,8 @@ internal class SendspinControllerImpl(
     private var discoveryJob: Job? = null
 
     private var wasMusicPlayingBeforeSendspin = false
+    private var isDuckedForVoiceInteraction = false
+    private var activeDuckingGain = 0.25f
 
     override var status: SendspinRuntimeStatus = SendspinRuntimeStatus(enabled = config.sendspinEnabled)
         private set
@@ -119,6 +121,15 @@ internal class SendspinControllerImpl(
         status = status.copy(connected = false)
         publishStatus()
         restoreMusicIfNeeded()
+    }
+
+    override fun setDucked(ducked: Boolean) {
+        val duckingGain = (config.duckingVolume / 50f).coerceIn(0f, 1f)
+        if (isDuckedForVoiceInteraction == ducked && (!ducked || activeDuckingGain == duckingGain)) return
+        isDuckedForVoiceInteraction = ducked
+        activeDuckingGain = duckingGain
+        Timber.d("Sendspin ducking set: active=$ducked gain=$duckingGain")
+        AndroidSendspinAudioPlayer.setDuckingEnabled(ducked, duckingGain)
     }
 
     private fun startDiscoveryAndConnect(client: SendSpinClient) {
