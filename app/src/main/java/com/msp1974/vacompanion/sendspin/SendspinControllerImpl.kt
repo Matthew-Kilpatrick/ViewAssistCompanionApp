@@ -6,11 +6,13 @@ import com.msp1974.vacompanion.device.DeviceManager
 import com.msp1974.vacompanion.utils.Event
 import com.sendspin.protocol.AudioFormat
 import com.sendspin.protocol.ArtworkChannel
+import com.sendspin.protocol.ClientAdvertiser
 import com.sendspin.protocol.ClientPreferences
 import com.sendspin.protocol.ClientState
 import com.sendspin.protocol.DiscoveryService
 import com.sendspin.protocol.JsonOptionalAdapterFactory
 import com.sendspin.protocol.SendSpinClient
+import com.sendspin.protocol.SendSpinServerHost
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import timber.log.Timber
+import com.msp1974.vacompanion.utils.Helpers
 
 internal class SendspinControllerImpl(
     private val context: Context,
@@ -47,6 +50,8 @@ internal class SendspinControllerImpl(
     private var serverNameJob: Job? = null
     private var serverIdJob: Job? = null
     private var discoveryJob: Job? = null
+    private var advertiseJob: Job? = null
+    private var serverHost: SendSpinServerHost? = null
 
     private var wasMusicPlayingBeforeSendspin = false
     private var isDuckedForVoiceInteraction = false
@@ -64,7 +69,10 @@ internal class SendspinControllerImpl(
 
         stopInternal(clearEnabled = false)
 
-        val endpoint = buildEndpoint(config.sendspinHost)
+        val endpoint = when (config.sendspinConnectionMode) {
+            SendspinConnectionMode.CLIENT_INITIATED -> buildEndpoint(config.sendspinHost)
+            SendspinConnectionMode.SERVER_INITIATED -> buildEndpoint(Helpers.getIpv4HostAddress().ifBlank { "0.0.0.0" })
+        }
         val client = createClient()
         sendspinClient = client
         status = status.copy(
@@ -99,10 +107,17 @@ internal class SendspinControllerImpl(
             }
             .launchIn(scope)
 
-        if (config.sendspinHost.isBlank()) {
-            startDiscoveryAndConnect(client)
-        } else {
-            client.connect(endpoint)
+        when (config.sendspinConnectionMode) {
+            SendspinConnectionMode.CLIENT_INITIATED -> {
+                if (config.sendspinHost.isBlank()) {
+                    startDiscoveryAndConnect(client)
+                } else {
+                    client.connect(endpoint)
+                }
+            }
+            SendspinConnectionMode.SERVER_INITIATED -> {
+                startServerHost(client)
+            }
         }
     }
 
@@ -178,6 +193,38 @@ internal class SendspinControllerImpl(
         )
     }
 
+    private fun startServerHost(client: SendSpinClient) {
+        advertiseJob?.cancel()
+        serverHost?.stopServer()
+        val host = SendSpinServerHost(
+            client = client,
+            moshi = moshi,
+            port = config.sendspinPort,
+            scope = scope,
+        )
+        serverHost = host
+
+        runCatching {
+            host.startServer()
+            val advertiser = ClientAdvertiser(AndroidSendspinNsdRegistrar(context))
+            advertiseJob = advertiser.advertise(
+                port = config.sendspinPort,
+                name = "VACA-${config.uuid.take(8)}",
+                manufacturer = Build.MANUFACTURER ?: "Android",
+                model = Build.MODEL ?: "Device",
+            ).onEach {
+                Timber.d("Sendspin NSD advertisement active")
+            }.launchIn(scope)
+        }.onFailure { error ->
+            Timber.e(error, "Failed to start Sendspin server host")
+            status = status.copy(
+                state = ClientState.ERROR,
+                lastError = "Failed to start listener",
+            )
+            publishStatus()
+        }
+    }
+
     private fun onClientStateChanged(state: ClientState) {
         val connected = SendspinUtils.isConnectedState(state)
         status = status.copy(
@@ -215,6 +262,10 @@ internal class SendspinControllerImpl(
 
     private fun stopInternal(clearEnabled: Boolean) {
         discoveryJob?.cancel()
+        advertiseJob?.cancel()
+        advertiseJob = null
+        serverHost?.stopServer()
+        serverHost = null
         stateJob?.cancel()
         serverNameJob?.cancel()
         serverIdJob?.cancel()

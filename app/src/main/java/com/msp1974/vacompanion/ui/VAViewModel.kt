@@ -15,7 +15,7 @@ import com.msp1974.vacompanion.broadcasts.BroadcastSender
 import com.msp1974.vacompanion.device.sensors.NetworkStatus
 import com.msp1974.vacompanion.settings.APPConfig
 import com.msp1974.vacompanion.settings.PageLoadingStage
-import com.msp1974.vacompanion.sendspin.SendspinDefaults
+import com.msp1974.vacompanion.sendspin.SendspinConnectionMode
 import com.msp1974.vacompanion.utils.Event
 import com.msp1974.vacompanion.utils.EventListener
 import com.msp1974.vacompanion.utils.Helpers
@@ -151,6 +151,7 @@ data class State(
     var sendspinPort: Int = SendspinDefaults.PORT,
     var sendspinPath: String = SendspinDefaults.PATH,
     var sendspinReconnect: Boolean = true,
+    var sendspinConnectionMode: SendspinConnectionMode = SendspinConnectionMode.SERVER_INITIATED,
     var sendspinStatus: String = "Disabled"
     )
 
@@ -235,7 +236,8 @@ class VAViewModel @Inject constructor(
                 sendspinHost = config.sendspinHost,
                 sendspinPort = config.sendspinPort,
                 sendspinPath = config.sendspinPath,
-                sendspinReconnect = config.sendspinReconnect
+                sendspinReconnect = config.sendspinReconnect,
+                sendspinConnectionMode = config.sendspinConnectionMode,
             )
         }
 
@@ -774,6 +776,12 @@ class VAViewModel @Inject constructor(
         config.sendspinReconnect = enabled
         config.sendspinReconnectPref = enabled
         _vacaState.update { it.copy(sendspinReconnect = enabled) }
+    }
+
+    fun setSendspinConnectionMode(mode: SendspinConnectionMode) {
+        config.sendspinConnectionMode = mode
+        config.sendspinConnectionModePref = mode
+        _vacaState.update { it.copy(sendspinConnectionMode = mode) }
     }
 
     fun setSendspinStaticDelayMs(delayMs: Int) {

@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.msp1974.vacompanion.sendspin.SendspinConnectionMode
 import com.msp1974.vacompanion.ui.VAViewModel
 import com.msp1974.vacompanion.ui.components.MenuLayout
 
@@ -36,6 +37,7 @@ fun SendspinSettingsLayout(
     var hostDraft by remember(state.sendspinHost) { mutableStateOf(state.sendspinHost) }
     var portDraft by remember(state.sendspinPort) { mutableStateOf(state.sendspinPort.toString()) }
     var pathDraft by remember(state.sendspinPath) { mutableStateOf(state.sendspinPath) }
+    val isClientInitiated = state.sendspinConnectionMode == SendspinConnectionMode.CLIENT_INITIATED
 
     MenuLayout(
         title = "Sendspin",
@@ -69,6 +71,25 @@ fun SendspinSettingsLayout(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
+                    text = "Server-initiated connection",
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Switch(
+                    checked = state.sendspinConnectionMode == SendspinConnectionMode.SERVER_INITIATED,
+                    onCheckedChange = { enabled ->
+                        viewModel.setSendspinConnectionMode(
+                            if (enabled) SendspinConnectionMode.SERVER_INITIATED else SendspinConnectionMode.CLIENT_INITIATED,
+                        )
+                    },
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
                     text = "Auto reconnect",
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -92,47 +113,53 @@ fun SendspinSettingsLayout(
                 )
             }
 
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = hostDraft,
-                onValueChange = { hostDraft = it },
-                label = { Text("Server host (optional)") },
-                singleLine = true,
-                enabled = !state.sendspinEnabled,
-            )
+            if (isClientInitiated) {
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = hostDraft,
+                    onValueChange = { hostDraft = it },
+                    label = { Text("Server host (optional)") },
+                    singleLine = true,
+                    enabled = !state.sendspinEnabled,
+                )
 
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = portDraft,
-                onValueChange = { portDraft = it.filter { c -> c.isDigit() } },
-                label = { Text("Server port") },
-                singleLine = true,
-                enabled = !state.sendspinEnabled,
-            )
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = portDraft,
+                    onValueChange = { portDraft = it.filter { c -> c.isDigit() } },
+                    label = { Text("Server port") },
+                    singleLine = true,
+                    enabled = !state.sendspinEnabled,
+                )
 
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = pathDraft,
-                onValueChange = { pathDraft = it },
-                label = { Text("WebSocket path") },
-                singleLine = true,
-                enabled = !state.sendspinEnabled,
-            )
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = pathDraft,
+                    onValueChange = { pathDraft = it },
+                    label = { Text("WebSocket path") },
+                    singleLine = true,
+                    enabled = !state.sendspinEnabled,
+                )
 
-            Button(
-                onClick = {
-                    viewModel.setSendspinHost(hostDraft)
-                    viewModel.setSendspinPort(portDraft.toIntOrNull() ?: state.sendspinPort)
-                    viewModel.setSendspinPath(pathDraft)
-                },
-                enabled = !state.sendspinEnabled,
-            ) {
-                Text("Save endpoint")
+                Button(
+                    onClick = {
+                        viewModel.setSendspinHost(hostDraft)
+                        viewModel.setSendspinPort(portDraft.toIntOrNull() ?: state.sendspinPort)
+                        viewModel.setSendspinPath(pathDraft)
+                    },
+                    enabled = !state.sendspinEnabled,
+                ) {
+                    Text("Save endpoint")
+                }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "For auto-discovery, leave host blank. Disable Sendspin to edit endpoint values.",
+                text = if (state.sendspinConnectionMode == SendspinConnectionMode.SERVER_INITIATED) {
+                    "In server-initiated mode, this device listens for incoming Sendspin connections on port ${state.sendspinPort}."
+                } else {
+                    "For auto-discovery, leave host blank. Disable Sendspin to edit endpoint values."
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
             )

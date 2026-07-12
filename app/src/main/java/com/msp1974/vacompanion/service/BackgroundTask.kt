@@ -138,6 +138,11 @@ internal class BackgroundTaskController (private val context: Context, val devic
                     sendspinController?.start()
                 }
             }
+            "sendspinConnectionMode" -> {
+                if (config.sendspinEnabled) {
+                    sendspinController?.start()
+                }
+            }
             "voiceInteractionActive" -> {
                 val active = event.newValue as? Boolean ?: return
                 voiceInteractionActive = active

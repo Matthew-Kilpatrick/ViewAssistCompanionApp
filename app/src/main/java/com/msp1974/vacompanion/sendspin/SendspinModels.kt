@@ -18,12 +18,40 @@ object SendspinPrefKeys {
     const val PORT = "sendspin_port"
     const val PATH = "sendspin_path"
     const val RECONNECT = "sendspin_reconnect"
+    const val CONNECTION_MODE = "sendspin_connection_mode"
     const val STATIC_DELAY_MS = "sendspin_static_delay_ms"
 }
 
 enum class SendspinConnectionMode {
     CLIENT_INITIATED,
+    SERVER_INITIATED,
+    ;
+
+    val configValue: String
+        get() = name.lowercase()
+
+    companion object {
+        fun fromConfigValue(value: String?): SendspinConnectionMode {
+            val normalized = value
+                ?.trim()
+                ?.replace('-', '_')
+                ?.uppercase()
+                ?: return SERVER_INITIATED
+
+            return entries.firstOrNull { it.name == normalized } ?: SERVER_INITIATED
+        }
+    }
 }
+
+data class SendspinConfig(
+    val enabled: Boolean,
+    val host: String,
+    val port: Int,
+    val path: String,
+    val reconnectEnabled: Boolean,
+    val mode: SendspinConnectionMode = SendspinConnectionMode.SERVER_INITIATED,
+    val staticDelayMs: Int = 0,
+)
 
 data class SendspinRuntimeStatus(
     val enabled: Boolean = false,

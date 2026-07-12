@@ -291,6 +291,10 @@ class APPConfig @Inject constructor(val context: Context) {
         onValueChangedListener(property, oldValue, newValue)
     }
 
+    var sendspinConnectionMode: SendspinConnectionMode by Delegates.observable(SendspinConnectionMode.SERVER_INITIATED) { property, oldValue, newValue ->
+        onValueChangedListener(property, oldValue, newValue)
+    }
+
     var sendspinStaticDelayMs: Int by Delegates.observable(0) { property, oldValue, newValue ->
         onValueChangedListener(property, oldValue, newValue)
     }
@@ -358,6 +362,10 @@ class APPConfig @Inject constructor(val context: Context) {
     var sendspinReconnectPref: Boolean
         get() = this.sharedPrefs.getBoolean(SendspinPrefKeys.RECONNECT, true)
         set(value) = this.sharedPrefs.edit { putBoolean(SendspinPrefKeys.RECONNECT, value) }
+
+    var sendspinConnectionModePref: SendspinConnectionMode
+        get() = SendspinConnectionMode.fromConfigValue(this.sharedPrefs.getString(SendspinPrefKeys.CONNECTION_MODE, SendspinConnectionMode.SERVER_INITIATED.configValue))
+        set(value) = this.sharedPrefs.edit { putString(SendspinPrefKeys.CONNECTION_MODE, value.configValue) }
 
     var sendspinStaticDelayMsPref: Int
         get() = this.sharedPrefs.getInt(SendspinPrefKeys.STATIC_DELAY_MS, 0)
@@ -441,7 +449,11 @@ class APPConfig @Inject constructor(val context: Context) {
             sendspinReconnect = it
             sendspinReconnectPref = it
         }
-
+        settings[SendspinPrefKeys.CONNECTION_MODE]?.jsonPrimitive?.contentOrNull?.let {
+            val mode = SendspinConnectionMode.fromConfigValue(it)
+            sendspinConnectionMode = mode
+            sendspinConnectionModePref = mode
+        }
         settings["sendspin_static_delay_ms"]?.jsonPrimitive?.intOrNull?.let {
             sendspinStaticDelayMs = it
             sendspinStaticDelayMsPref = it
@@ -456,6 +468,7 @@ class APPConfig @Inject constructor(val context: Context) {
         sendspinPort = sendspinPortPref
         sendspinPath = sendspinPathPref
         sendspinReconnect = sendspinReconnectPref
+        sendspinConnectionMode = sendspinConnectionModePref
         sendspinStaticDelayMs = sendspinStaticDelayMsPref
     }
 
