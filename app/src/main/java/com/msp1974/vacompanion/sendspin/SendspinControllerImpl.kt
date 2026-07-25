@@ -166,7 +166,11 @@ internal class SendspinControllerImpl(
 
     private fun createClient(): SendSpinClient {
         val preferences = ClientPreferences(
+            // Listed in priority order (first preferred): prefer Opus for bandwidth efficiency,
+            // falling back to PCM. Only list codecs AndroidSendspinAudioPlayer can actually decode.
             supportedFormats = listOf(
+                AudioFormat(codec = "opus", channels = 2, sampleRate = 48_000, bitDepth = 16),
+                AudioFormat(codec = "opus", channels = 1, sampleRate = 48_000, bitDepth = 16),
                 AudioFormat(codec = "pcm", channels = 2, sampleRate = 48_000, bitDepth = 16),
                 AudioFormat(codec = "pcm", channels = 1, sampleRate = 48_000, bitDepth = 16),
             ),
