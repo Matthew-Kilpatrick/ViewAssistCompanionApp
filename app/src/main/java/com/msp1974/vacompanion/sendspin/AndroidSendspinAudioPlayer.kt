@@ -15,6 +15,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 import timber.log.Timber
 
@@ -64,6 +65,8 @@ internal class AndroidSendspinAudioPlayer(
     @Volatile
     private var playbackGain: Float = 1f
 
+    private val trackLock = Any()
+
     @Volatile
     private var audioTrack: AudioTrack? = null
     private var worker: Thread? = null
@@ -75,19 +78,28 @@ internal class AndroidSendspinAudioPlayer(
     override var isPlaying: Boolean = false
         private set
 
-    @Volatile
-    override var droppedDecodeFrames: Long = 0L
-        private set
+    private val droppedDecodeFramesAtomic = AtomicLong(0L)
+    override var droppedDecodeFrames: Long
+        get() = droppedDecodeFramesAtomic.get()
+        private set(value) {
+            droppedDecodeFramesAtomic.set(value)
+        }
 
     private val stopRequested = AtomicBoolean(false)
+    private val flushRequested = AtomicBoolean(false)
 
     private var opusDecoder: MediaCodec? = null
     private var lastQueuedOpusPtsUs: Long = 0L
     private var loggedUnsupportedCodec: String? = null
 
     override fun configure(format: StreamFormat) {
+        val wasPlaying = isPlaying
+        if (wasPlaying) {
+            stop()
+        }
+
         currentFormat = format
-        flush()
+        audioBuffer.flush()
         releaseOpusDecoder()
 
         val isOpus = format.codec.equals(OPUS_CODEC, ignoreCase = true)
@@ -128,21 +140,39 @@ internal class AndroidSendspinAudioPlayer(
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
 
-        audioTrack?.release()
-        audioTrack = newTrack
-        applyEffectiveVolume()
+        synchronized(trackLock) {
+            runCatching { audioTrack?.release() }
+            audioTrack = newTrack
+            applyEffectiveVolumeLocked()
+        }
+
+        if (wasPlaying) {
+            start()
+        }
     }
 
     override fun start() {
-        val track = audioTrack ?: return
         if (isPlaying) return
 
         stopRequested.set(false)
-        track.play()
+        flushRequested.set(false)
+
+        val started = synchronized(trackLock) {
+            val track = audioTrack ?: return@synchronized false
+            runCatching {
+                track.play()
+                true
+            }.getOrElse { error ->
+                Timber.w(error, "Failed to start Sendspin AudioTrack")
+                false
+            }
+        }
+        if (!started) return
+
         isPlaying = true
         activePlayers.add(this)
         worker = thread(start = true, name = "sendspin-audio-worker") {
-            runPlaybackLoop(track)
+            runPlaybackLoop()
         }
     }
 
@@ -155,18 +185,24 @@ internal class AndroidSendspinAudioPlayer(
 
     override fun stop() {
         stopRequested.set(true)
-        worker?.join(300)
+        flushRequested.set(false)
+
+        worker?.interrupt()
+        worker?.join(1000)
         worker = null
 
-        audioTrack?.let { track ->
-            runCatching {
-                track.pause()
-                track.flush()
-                track.stop()
+        synchronized(trackLock) {
+            audioTrack?.let { track ->
+                runCatching {
+                    track.pause()
+                    track.flush()
+                    track.stop()
+                }
+                runCatching { track.release() }
             }
-            track.release()
+            audioTrack = null
         }
-        audioTrack = null
+
         isPlaying = false
         activePlayers.remove(this)
         releaseOpusDecoder()
@@ -183,12 +219,34 @@ internal class AndroidSendspinAudioPlayer(
     }
 
     private fun applyEffectiveVolume() {
-        val targetGain = if (duckingEnabled) duckingGain else NORMAL_GAIN
-        audioTrack?.setVolume((playbackGain * targetGain).coerceIn(0f, 1f))
+        synchronized(trackLock) {
+            applyEffectiveVolumeLocked()
+        }
     }
 
-    private fun runPlaybackLoop(track: AudioTrack) {
+    private fun applyEffectiveVolumeLocked() {
+        val targetGain = if (duckingEnabled) duckingGain else NORMAL_GAIN
+        runCatching {
+            audioTrack?.setVolume((playbackGain * targetGain).coerceIn(0f, 1f))
+        }
+    }
+
+    private fun runPlaybackLoop() {
         while (!stopRequested.get()) {
+            if (flushRequested.compareAndSet(true, false)) {
+                synchronized(trackLock) {
+                    audioTrack?.let { track ->
+                        runCatching {
+                            track.pause()
+                            track.flush()
+                            if (isPlaying && !stopRequested.get()) {
+                                track.play()
+                            }
+                        }
+                    }
+                }
+            }
+
             val now = ClockSync.localMicros()
             val chunk = audioBuffer.poll(now)
             if (chunk == null) {
@@ -201,21 +259,44 @@ internal class AndroidSendspinAudioPlayer(
 
             val format = currentFormat
             if (format == null) {
-                droppedDecodeFrames++
+                droppedDecodeFramesAtomic.incrementAndGet()
                 continue
             }
 
             val pcm = decodeAsPcm(chunk.data, format)
             if (pcm == null) {
-                droppedDecodeFrames++
+                droppedDecodeFramesAtomic.incrementAndGet()
                 continue
             }
 
-            val writeResult = track.write(pcm, 0, pcm.size, AudioTrack.WRITE_BLOCKING)
-            if (writeResult < 0) {
-                droppedDecodeFrames++
+            if (!writePcmToTrack(pcm)) {
+                droppedDecodeFramesAtomic.incrementAndGet()
             }
         }
+    }
+
+    private fun writePcmToTrack(pcm: ByteArray): Boolean {
+        var offset = 0
+        while (offset < pcm.size && !stopRequested.get()) {
+            val writeResult = synchronized(trackLock) {
+                val track = audioTrack ?: return false
+                runCatching {
+                    track.write(pcm, offset, pcm.size - offset, AudioTrack.WRITE_NON_BLOCKING)
+                }.getOrElse { error ->
+                    Timber.w(error, "Sendspin AudioTrack write failed")
+                    return false
+                }
+            }
+
+            if (writeResult < 0) return false
+            if (writeResult == 0) {
+                runCatching { Thread.sleep(2L) }
+                continue
+            }
+
+            offset += writeResult
+        }
+        return offset == pcm.size
     }
 
     // Only codecs advertised in SendspinControllerImpl's ClientPreferences.supportedFormats
